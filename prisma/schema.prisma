@@ -1,0 +1,394 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffStatus {
+  ACTIVE
+  ON_LEAVE
+  LEFT
+}
+
+enum StudentStatus {
+  ACTIVE
+  TRANSFERRED
+  WITHDRAWN
+  GRADUATED
+  ALUMNI
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum GuardianRelationship {
+  FATHER
+  MOTHER
+  UNCLE
+  AUNT
+  GUARDIAN
+  OTHER
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  PROMOTED
+  REPEATED
+  TRANSFERRED
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  module      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       User[]
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  positions Position[]
+  staff     Staff[]
+}
+
+model Position {
+  id           String      @id @default(cuid())
+  name         String
+  description  String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  staff Staff[]
+
+  @@unique([name, departmentId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String
+  roleId       String?
+  role         Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  isActive     Boolean  @default(true)
+  imageUrl     String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  staff         Staff?
+  guardian      Guardian?
+  student       Student?
+  announcements Announcement[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@index([roleId])
+}
+
+model SchoolSettings {
+  id             String   @id @default(cuid())
+  name           String
+  shortName      String?
+  logoUrl        String?
+  address        String?
+  phone          String?
+  email          String?
+  primaryColor   String   @default("#2563EB")
+  secondaryColor String   @default("#1E40AF")
+  accentColor    String   @default("#F59E0B")
+  defaultTheme   String   @default("system")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Staff {
+  id           String       @id @default(cuid())
+  userId       String?      @unique
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  staffNo      String       @unique
+  firstName    String
+  lastName     String
+  otherNames   String?
+  gender       Gender?
+  phone        String?
+  email        String?
+  photoUrl     String?
+  hireDate     DateTime?
+  status       StaffStatus  @default(ACTIVE)
+  departmentId String?
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  positionId   String?
+  position     Position?    @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  classSections   ClassSection[]   @relation("ClassTeacher")
+  teacherSubjects TeacherSubject[]
+}
+
+model Guardian {
+  id         String   @id @default(cuid())
+  userId     String?  @unique
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName   String
+  phone      String?
+  email      String?
+  occupation String?
+  address    String?
+  photoUrl   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  students StudentGuardian[]
+}
+
+model Student {
+  id                    String         @id @default(cuid())
+  userId                String?        @unique
+  user                  User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  admissionNo           String         @unique
+  firstName             String
+  lastName              String
+  otherNames            String?
+  gender                Gender?
+  dateOfBirth           DateTime?
+  admissionDate         DateTime?
+  status                StudentStatus  @default(ACTIVE)
+  currentClassSectionId String?
+  currentClassSection   ClassSection?  @relation("CurrentClass", fields: [currentClassSectionId], references: [id], onDelete: SetNull)
+  photoUrl              String?
+  bloodGroup            String?
+  allergies             String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  guardians   StudentGuardian[]
+  enrollments Enrollment[]
+
+  @@index([lastName, firstName])
+  @@index([status])
+}
+
+model StudentGuardian {
+  id           String               @id @default(cuid())
+  studentId    String
+  guardianId   String
+  student      Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian     Guardian             @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  relationship GuardianRelationship @default(GUARDIAN)
+  isPrimary    Boolean              @default(false)
+  canPickup    Boolean              @default(true)
+
+  @@unique([studentId, guardianId])
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  terms           Term[]
+  classSections   ClassSection[]
+  enrollments     Enrollment[]
+  teacherSubjects TeacherSubject[]
+}
+
+model Term {
+  id             String       @id @default(cuid())
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  name           String
+  termNumber     Int
+  startDate      DateTime
+  endDate        DateTime
+  isCurrent      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([academicYearId, termNumber])
+}
+
+model Stage {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gradeLevels GradeLevel[]
+  subjects    Subject[]
+}
+
+model GradeLevel {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  stageId   String?
+  stage     Stage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  classSections ClassSection[]
+
+  @@index([stageId])
+}
+
+model ClassSection {
+  id             String       @id @default(cuid())
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  gradeLevelId   String
+  gradeLevel     GradeLevel   @relation(fields: [gradeLevelId], references: [id], onDelete: Restrict)
+  name           String
+  section        String?
+  classTeacherId String?
+  classTeacher   Staff?       @relation("ClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull)
+  room           String?
+  capacity       Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  currentStudents Student[]         @relation("CurrentClass")
+  enrollments     Enrollment[]
+  teacherSubjects TeacherSubject[]
+  announcements   Announcement[]
+
+  @@unique([academicYearId, gradeLevelId, name])
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  stageId   String?
+  stage     Stage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  isCore    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacherSubjects TeacherSubject[]
+
+  @@index([stageId])
+}
+
+model TeacherSubject {
+  id             String       @id @default(cuid())
+  staffId        String
+  subjectId      String
+  classSectionId String
+  academicYearId String
+  staff          Staff        @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classSection   ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, subjectId, classSectionId, academicYearId])
+}
+
+model Enrollment {
+  id             String           @id @default(cuid())
+  studentId      String
+  classSectionId String
+  academicYearId String
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  status         EnrollmentStatus @default(ENROLLED)
+  enrolledOn     DateTime         @default(now())
+
+  @@unique([studentId, academicYearId])
+}
+
+model Announcement {
+  id              String        @id @default(cuid())
+  title           String
+  body            String
+  createdByUserId String
+  createdBy       User          @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  audience        String        @default("all")
+  classSectionId  String?
+  classSection    ClassSection? @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
+  publishedAt     DateTime      @default(now())
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  body        String
+  relatedType String?
+  relatedId   String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String?
+  entityId   String?
+  oldValues  Json?
+  newValues  Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+}
