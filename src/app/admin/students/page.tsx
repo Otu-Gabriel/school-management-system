@@ -16,6 +16,10 @@ import { TableFilters } from "@/components/table/table-filters";
 import { TablePagination } from "@/components/table/table-pagination";
 import { RecordActions } from "@/components/table/record-actions";
 import { getTotalPages, parsePage, parsePageSize } from "@/lib/table";
+import {
+  getAccessibleClassIds,
+  getAccessibleClassOptions,
+} from "@/lib/access-scope";
 
 const STUDENT_TEMPLATE = [
   "admissionNo,firstName,lastName,otherNames,gender,dateOfBirth,class,guardianName,guardianPhone,guardianEmail,relationship",
@@ -41,6 +45,29 @@ export default async function StudentsPage({
   const gender = param(params.gender) || "";
   const skip = (page - 1) * pageSize;
 
+  const accessibleClassIds = await getAccessibleClassIds(
+    session.user.id,
+    session.user.permissions
+  );
+  const scopedClassOptions = await getAccessibleClassOptions(
+    session.user.id,
+    session.user.permissions
+  );
+
+  // Teachers without school-wide access only see students in their classes.
+  const classScope: Prisma.StudentWhereInput =
+    accessibleClassIds === null
+      ? classSectionId
+        ? { currentClassSectionId: classSectionId }
+        : {}
+      : {
+          currentClassSectionId: classSectionId
+            ? accessibleClassIds.includes(classSectionId)
+              ? classSectionId
+              : "__none__"
+            : { in: accessibleClassIds.length ? accessibleClassIds : ["__none__"] },
+        };
+
   const where: Prisma.StudentWhereInput = {
     AND: [
       q
@@ -53,12 +80,12 @@ export default async function StudentsPage({
           }
         : {},
       status ? { status: status as never } : {},
-      classSectionId ? { currentClassSectionId: classSectionId } : {},
+      classScope,
       gender ? { gender: gender as never } : {},
     ],
   };
 
-  const [total, students, classes] = await Promise.all([
+  const [total, students] = await Promise.all([
     prisma.student.count({ where }),
     prisma.student.findMany({
       where,
@@ -70,17 +97,13 @@ export default async function StudentsPage({
       skip,
       take: pageSize,
     }),
-    prisma.classSection.findMany({
-      where: { academicYear: { isCurrent: true } },
-      include: { gradeLevel: true },
-      orderBy: [{ gradeLevel: { sortOrder: "asc" } }, { name: "asc" }],
-    }),
   ]);
 
   const totalPages = getTotalPages(total, pageSize);
   const canWrite = can(session.user.permissions, "students.write");
   const canImport = can(session.user.permissions, "students.import");
   const canExport = can(session.user.permissions, "students.export");
+  const classes = scopedClassOptions;
 
   return (
     <>
@@ -91,7 +114,11 @@ export default async function StudentsPage({
         </Suspense>
 
         <PageHeader
-          description="Manage pupil records for Primary through JHS."
+          description={
+            accessibleClassIds === null
+              ? "Manage pupil records for Primary through JHS."
+              : "Showing students in classes you teach or lead as class teacher."
+          }
           actions={
             <>
               {canWrite ? (
@@ -144,7 +171,7 @@ export default async function StudentsPage({
                 type: "select",
                 options: classes.map((c) => ({
                   value: c.id,
-                  label: `${c.gradeLevel.code} ${c.name}`,
+                  label: c.label,
                 })),
               },
               {
@@ -163,7 +190,10 @@ export default async function StudentsPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>All students ({total})</CardTitle>
+            <CardTitle>
+              {accessibleClassIds === null ? "All students" : "My students"} (
+              {total})
+            </CardTitle>
           </CardHeader>
           <CardBody className="pt-1.5">
             <div className="overflow-x-auto">

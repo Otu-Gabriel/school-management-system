@@ -63,7 +63,9 @@ async function main() {
 
   const school = await prisma.schoolSettings.upsert({
     where: { id: "default-school" },
-    update: {},
+    update: {
+      weekendClosed: "0,6",
+    },
     create: {
       id: "default-school",
       name: "Greenfield Primary & JHS",
@@ -74,6 +76,7 @@ async function main() {
       email: "info@greenfield.local",
       phone: "+233000000000",
       address: "Accra, Ghana",
+      weekendClosed: "0,6",
     },
   });
 
@@ -169,13 +172,19 @@ async function main() {
   });
 
   const year = await prisma.academicYear.upsert({
-    where: { name: "2025/2026" },
-    update: { isCurrent: true },
-    create: {
-      name: "2025/2026",
-      startDate: new Date("2025-09-01"),
-      endDate: new Date("2026-07-31"),
+    where: { name: "2026/2027" },
+    update: {
       isCurrent: true,
+      isArchived: false,
+      startDate: new Date("2026-09-01T00:00:00.000Z"),
+      endDate: new Date("2027-07-31T00:00:00.000Z"),
+    },
+    create: {
+      name: "2026/2027",
+      startDate: new Date("2026-09-01T00:00:00.000Z"),
+      endDate: new Date("2027-07-31T00:00:00.000Z"),
+      isCurrent: true,
+      isArchived: false,
     },
   });
 
@@ -185,13 +194,29 @@ async function main() {
   });
 
   const terms = [
-    { name: "Term 1", termNumber: 1, start: "2025-09-01", end: "2025-12-15" },
-    { name: "Term 2", termNumber: 2, start: "2026-01-08", end: "2026-04-10" },
-    { name: "Term 3", termNumber: 3, start: "2026-04-28", end: "2026-07-31" },
+    { name: "Term 1", termNumber: 1, start: "2026-09-01", end: "2026-12-15" },
+    { name: "Term 2", termNumber: 2, start: "2027-01-08", end: "2027-04-10" },
+    { name: "Term 3", termNumber: 3, start: "2027-04-28", end: "2027-07-31" },
   ];
 
+  const today = new Date();
+  const todayUtc = Date.UTC(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  const currentTermNumber =
+    terms.find((term) => {
+      const start = Date.parse(term.start + "T00:00:00.000Z");
+      const end = Date.parse(term.end + "T00:00:00.000Z");
+      return todayUtc >= start && todayUtc <= end;
+    })?.termNumber || 1;
+
+  await prisma.term.updateMany({ data: { isCurrent: false } });
+
+  const seededTerms: { id: string; termNumber: number }[] = [];
   for (const term of terms) {
-    await prisma.term.upsert({
+    const row = await prisma.term.upsert({
       where: {
         academicYearId_termNumber: {
           academicYearId: year.id,
@@ -200,20 +225,52 @@ async function main() {
       },
       update: {
         name: term.name,
-        startDate: new Date(term.start),
-        endDate: new Date(term.end),
-        isCurrent: term.termNumber === 1,
+        startDate: new Date(term.start + "T00:00:00.000Z"),
+        endDate: new Date(term.end + "T00:00:00.000Z"),
+        isCurrent: term.termNumber === currentTermNumber,
+        isLocked: false,
       },
       create: {
         academicYearId: year.id,
         name: term.name,
         termNumber: term.termNumber,
-        startDate: new Date(term.start),
-        endDate: new Date(term.end),
-        isCurrent: term.termNumber === 1,
+        startDate: new Date(term.start + "T00:00:00.000Z"),
+        endDate: new Date(term.end + "T00:00:00.000Z"),
+        isCurrent: term.termNumber === currentTermNumber,
+        isLocked: false,
+      },
+    });
+    seededTerms.push({ id: row.id, termNumber: row.termNumber });
+  }
+
+  const term1 = seededTerms.find((t) => t.termNumber === 1);
+  if (term1) {
+    // Sample holiday inside Term 1 (Kwame Nkrumah Memorial Day).
+    await prisma.calendarException.upsert({
+      where: { date: new Date("2026-09-21T00:00:00.000Z") },
+      update: {
+        type: "CLOSED",
+        name: "Kwame Nkrumah Memorial Day",
+        academicYearId: year.id,
+        termId: term1.id,
+      },
+      create: {
+        date: new Date("2026-09-21T00:00:00.000Z"),
+        type: "CLOSED",
+        name: "Kwame Nkrumah Memorial Day",
+        academicYearId: year.id,
+        termId: term1.id,
       },
     });
   }
+
+  // Remove older sample holiday that sat outside a term window.
+  await prisma.calendarException.deleteMany({
+    where: { date: new Date("2025-12-25T00:00:00.000Z") },
+  });
+  await prisma.calendarException.deleteMany({
+    where: { date: new Date("2026-12-25T00:00:00.000Z") },
+  });
 
   const primaryStage = await prisma.stage.upsert({
     where: { code: "PRIMARY" },

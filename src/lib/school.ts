@@ -14,6 +14,7 @@ export async function getSchoolSettings() {
       primaryColor: "#2563EB",
       secondaryColor: "#1E40AF",
       accentColor: "#F59E0B",
+      weekendClosed: "0,6",
     },
   });
 }
@@ -28,7 +29,7 @@ export async function getCurrentAcademicContext() {
     },
   });
 
-  const term = year?.terms.find((t) => t.isCurrent) || year?.terms[0] || null;
+  const term = year?.terms.find((t) => t.isCurrent) || null;
 
   return { year, term };
 }

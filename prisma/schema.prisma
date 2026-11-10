@@ -43,6 +43,18 @@ enum EnrollmentStatus {
   TRANSFERRED
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum CalendarDayType {
+  CLOSED
+  OPEN
+}
+
 model Permission {
   id          String   @id @default(cuid())
   code        String   @unique
@@ -139,6 +151,8 @@ model SchoolSettings {
   secondaryColor String   @default("#1E40AF")
   accentColor    String   @default("#F59E0B")
   defaultTheme   String   @default("system")
+  /// Comma-separated JS weekday numbers that are non-school days. Default Sun+Sat = "0,6"
+  weekendClosed  String   @default("0,6")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -164,8 +178,9 @@ model Staff {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  classSections   ClassSection[]   @relation("ClassTeacher")
-  teacherSubjects TeacherSubject[]
+  classSections       ClassSection[]      @relation("ClassTeacher")
+  teacherSubjects     TeacherSubject[]
+  attendanceMarked    AttendanceRecord[]  @relation("AttendanceMarkedBy")
 }
 
 model Guardian {
@@ -206,6 +221,7 @@ model Student {
 
   guardians   StudentGuardian[]
   enrollments Enrollment[]
+  attendance  AttendanceRecord[]
 
   @@index([lastName, firstName])
   @@index([status])
@@ -230,13 +246,16 @@ model AcademicYear {
   startDate DateTime
   endDate   DateTime
   isCurrent Boolean  @default(false)
+  isArchived Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  terms           Term[]
-  classSections   ClassSection[]
-  enrollments     Enrollment[]
-  teacherSubjects TeacherSubject[]
+  terms              Term[]
+  classSections      ClassSection[]
+  enrollments        Enrollment[]
+  teacherSubjects    TeacherSubject[]
+  attendance         AttendanceRecord[]
+  calendarExceptions CalendarException[]
 }
 
 model Term {
@@ -248,10 +267,33 @@ model Term {
   startDate      DateTime
   endDate        DateTime
   isCurrent      Boolean      @default(false)
+  isLocked       Boolean      @default(false)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  attendance         AttendanceRecord[]
+  calendarExceptions CalendarException[]
+
   @@unique([academicYearId, termNumber])
+}
+
+/// Holidays / closures (CLOSED) or special open days e.g. Saturday makeup (OPEN).
+/// Always attached to a term so dates stay within that term’s window.
+model CalendarException {
+  id             String          @id @default(cuid())
+  academicYearId String?
+  academicYear   AcademicYear?   @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  termId         String?
+  term           Term?           @relation(fields: [termId], references: [id], onDelete: Cascade)
+  date           DateTime        @db.Date
+  type           CalendarDayType @default(CLOSED)
+  name           String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([date])
+  @@index([academicYearId, date])
+  @@index([termId, date])
 }
 
 model Stage {
@@ -302,6 +344,7 @@ model ClassSection {
   enrollments     Enrollment[]
   teacherSubjects TeacherSubject[]
   announcements   Announcement[]
+  attendance      AttendanceRecord[]
 
   @@unique([academicYearId, gradeLevelId, name])
 }
@@ -347,6 +390,30 @@ model Enrollment {
   enrolledOn     DateTime         @default(now())
 
   @@unique([studentId, academicYearId])
+}
+
+model AttendanceRecord {
+  id             String           @id @default(cuid())
+  studentId      String
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSectionId String
+  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  termId         String?
+  term           Term?            @relation(fields: [termId], references: [id], onDelete: SetNull)
+  date           DateTime         @db.Date
+  status         AttendanceStatus @default(PRESENT)
+  remark         String?
+  markedById     String?
+  markedBy       Staff?           @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([studentId, classSectionId, date])
+  @@index([classSectionId, date])
+  @@index([termId, classSectionId])
+  @@index([date])
 }
 
 model Announcement {

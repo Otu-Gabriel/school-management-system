@@ -3,70 +3,64 @@ import { requirePermission } from "@/lib/authz";
 import { can } from "@/lib/permissions";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { getSchoolSettings } from "@/lib/school";
+import { formatDateOnly } from "@/lib/dates";
 import { AcademicYearForm } from "./year-form";
+import { YearsManager } from "./years-manager";
 
 export default async function AcademicYearsPage() {
   const session = await requirePermission("academics.read");
   const canWrite = can(session.user.permissions, "academics.write");
 
-  const years = await prisma.academicYear.findMany({
-    orderBy: { startDate: "desc" },
-    include: { terms: { orderBy: { termNumber: "asc" } } },
-  });
+  const [years, holidays, settings] = await Promise.all([
+    prisma.academicYear.findMany({
+      orderBy: { startDate: "desc" },
+      include: { terms: { orderBy: { termNumber: "asc" } } },
+    }),
+    prisma.calendarException.findMany({
+      orderBy: { date: "asc" },
+      include: { term: { select: { id: true, name: true } } },
+    }),
+    getSchoolSettings(),
+  ]);
 
   return (
     <>
       <Topbar title="Years & Terms" backHref="/admin" backLabel="Dashboard" />
       <main className="flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
         <PageHeader
-          description="Manage academic years and the terms within each year."
+          description="Work in the current academic year by default. Switch years to review calendars, terms, and holidays."
           actions={canWrite ? <AcademicYearForm /> : null}
         />
 
-        <div className="grid gap-2.5">
-          {years.length === 0 ? (
-            <Card>
-              <CardBody>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  No academic years yet.
-                </p>
-              </CardBody>
-            </Card>
-          ) : (
-            years.map((year) => (
-              <Card key={year.id}>
-                <CardHeader>
-                  <CardTitle>
-                    {year.name}
-                    {year.isCurrent ? (
-                      <span className="ml-2 text-[10px] font-medium text-[var(--brand-primary)]">
-                        Current
-                      </span>
-                    ) : null}
-                  </CardTitle>
-                </CardHeader>
-                <CardBody className="pt-1.5">
-                  <p className="mb-2 text-[11px] text-[var(--muted-foreground)]">
-                    {year.startDate.toLocaleDateString()} –{" "}
-                    {year.endDate.toLocaleDateString()}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {year.terms.map((term) => (
-                      <span
-                        key={term.id}
-                        className="rounded-md border border-[var(--border)] px-2 py-0.5 text-[11px]"
-                      >
-                        {term.name}
-                        {term.isCurrent ? " · current" : ""}
-                      </span>
-                    ))}
-                  </div>
-                </CardBody>
-              </Card>
-            ))
-          )}
-        </div>
+        <YearsManager
+          canWrite={canWrite}
+          weekendClosed={settings.weekendClosed}
+          years={years.map((year) => ({
+            id: year.id,
+            name: year.name,
+            startDate: formatDateOnly(year.startDate),
+            endDate: formatDateOnly(year.endDate),
+            isCurrent: year.isCurrent,
+            terms: year.terms.map((term) => ({
+              id: term.id,
+              name: term.name,
+              termNumber: term.termNumber,
+              startDate: formatDateOnly(term.startDate),
+              endDate: formatDateOnly(term.endDate),
+              isCurrent: term.isCurrent,
+              isLocked: term.isLocked,
+            })),
+          }))}
+          holidays={holidays.map((item) => ({
+            id: item.id,
+            date: formatDateOnly(item.date),
+            type: item.type,
+            name: item.name,
+            termId: item.termId,
+            academicYearId: item.academicYearId,
+          }))}
+        />
       </main>
     </>
   );

@@ -19,6 +19,9 @@ export type PermissionCode =
   | "assignments.write"
   | "announcements.read"
   | "announcements.write"
+  | "attendance.read"
+  | "attendance.write"
+  | "audit.read"
   | "settings.write"
   | "roles.manage"
   | "departments.manage"
@@ -151,6 +154,24 @@ export const PERMISSION_CATALOG: Array<{
     module: "Communication",
   },
   {
+    code: "attendance.read",
+    name: "View attendance",
+    description: "See class attendance registers and summaries",
+    module: "Attendance",
+  },
+  {
+    code: "attendance.write",
+    name: "Mark attendance",
+    description: "Take and update daily class attendance",
+    module: "Attendance",
+  },
+  {
+    code: "audit.read",
+    name: "View audit logs",
+    description: "See important system activity for accountability",
+    module: "System",
+  },
+  {
     code: "settings.write",
     name: "School settings",
     description: "Edit school profile and branding",
@@ -196,6 +217,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "assignments.write",
     "announcements.read",
     "announcements.write",
+    "attendance.read",
+    "attendance.write",
   ],
   Bursar: [
     "dashboard.view",
@@ -212,6 +235,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "subjects.read",
     "assignments.read",
     "announcements.read",
+    "attendance.read",
+    "attendance.write",
   ],
   Reception: [
     "dashboard.view",
@@ -219,6 +244,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "staff.read",
     "guardians.read",
     "announcements.read",
+    "attendance.read",
   ],
   Parent: ["dashboard.view", "announcements.read"],
   Student: ["dashboard.view", "announcements.read"],

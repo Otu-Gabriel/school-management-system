@@ -18,6 +18,9 @@ import {
   UserRound,
   Layers3,
   Milestone,
+  ClipboardCheck,
+  ScrollText,
+  Presentation,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -108,6 +111,23 @@ const sections: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: "Operations",
+    items: [
+      {
+        href: "/admin/attendance",
+        label: "Attendance",
+        icon: ClipboardCheck,
+        permission: "attendance.read",
+      },
+      {
+        href: "/admin/teacher",
+        label: "My teaching",
+        icon: Presentation,
+        permission: "attendance.read",
+      },
+    ],
+  },
+  {
     title: "Communication",
     items: [
       {
@@ -126,6 +146,12 @@ const sections: { title: string; items: NavItem[] }[] = [
         label: "Roles & permissions",
         icon: Shield,
         permission: "roles.manage",
+      },
+      {
+        href: "/admin/audit-logs",
+        label: "Audit logs",
+        icon: ScrollText,
+        permission: "audit.read",
       },
       {
         href: "/admin/departments",
