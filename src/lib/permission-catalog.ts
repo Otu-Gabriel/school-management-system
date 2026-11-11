@@ -25,6 +25,12 @@ export type PermissionCode =
   | "announcements.write"
   | "attendance.read"
   | "attendance.write"
+  | "marks.read"
+  | "marks.write"
+  | "marks.publish"
+  | "fees.read"
+  | "fees.write"
+  | "fees.collect"
   | "audit.read"
   | "settings.write"
   | "roles.manage"
@@ -195,6 +201,42 @@ export const PERMISSION_CATALOG: Array<{
     module: "Attendance",
   },
   {
+    code: "marks.read",
+    name: "View marks",
+    description: "See class scores, exams, and report cards",
+    module: "Assessment",
+  },
+  {
+    code: "marks.write",
+    name: "Enter marks",
+    description: "Enter class scores and exam marks",
+    module: "Assessment",
+  },
+  {
+    code: "marks.publish",
+    name: "Publish report cards",
+    description: "Publish term report cards for parents",
+    module: "Assessment",
+  },
+  {
+    code: "fees.read",
+    name: "View fees",
+    description: "See fee types, invoices, and balances",
+    module: "Fees",
+  },
+  {
+    code: "fees.write",
+    name: "Manage fees",
+    description: "Create fee types and bill students",
+    module: "Fees",
+  },
+  {
+    code: "fees.collect",
+    name: "Collect fees",
+    description: "Record fee payments",
+    module: "Fees",
+  },
+  {
     code: "audit.read",
     name: "View audit logs",
     description: "See important system activity for accountability",
@@ -258,6 +300,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "announcements.write",
     "attendance.read",
     "attendance.write",
+    "marks.read",
+    "marks.write",
+    "marks.publish",
+    "fees.read",
+    "fees.write",
   ],
   Bursar: [
     "dashboard.view",
@@ -266,6 +313,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "staff.read",
     "guardians.read",
     "announcements.read",
+    "fees.read",
+    "fees.write",
+    "fees.collect",
   ],
   Teacher: [
     "dashboard.view",
@@ -277,6 +327,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "announcements.read",
     "attendance.read",
     "attendance.write",
+    "marks.read",
+    "marks.write",
   ],
   Reception: [
     "dashboard.view",

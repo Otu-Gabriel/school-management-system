@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { can, type Permission } from "@/lib/permissions";
+import { can, homePathForPermissions, type Permission } from "@/lib/permissions";
 
 export async function requireSession() {
   const session = await getServerSession(authOptions);
@@ -12,8 +12,7 @@ export async function requireSession() {
 export async function requirePermission(permission: Permission) {
   const session = await requireSession();
   if (!can(session.user.permissions, permission)) {
-    // Avoid redirect loops when the user cannot view the dashboard itself.
-    redirect(permission === "dashboard.view" ? "/admin/account" : "/admin");
+    redirect(homePathForPermissions(session.user.permissions));
   }
   return session;
 }

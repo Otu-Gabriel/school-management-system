@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
+import { hash } from "bcryptjs";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -17,7 +18,40 @@ const schema = z.object({
     .enum(["FATHER", "MOTHER", "UNCLE", "AUNT", "GUARDIAN", "OTHER"])
     .optional(),
   isPrimary: z.boolean().optional(),
+  createLogin: z.boolean().optional(),
+  password: z.string().optional().nullable(),
+  roleId: z.string().optional().nullable(),
 });
+
+async function resolveParentRoleId(roleId?: string | null) {
+  if (roleId) {
+    const role = await prisma.role.findUnique({
+      where: { id: roleId },
+      include: { permissions: true },
+    });
+    if (!role) return { error: "Selected role was not found" as const };
+    if (role.permissions.length === 0) {
+      return {
+        error: "Selected role has no permissions. Assign permissions first." as const,
+      };
+    }
+    return { roleId: role.id };
+  }
+
+  const parentRole = await prisma.role.findUnique({
+    where: { name: "Parent" },
+    include: { permissions: true },
+  });
+  if (!parentRole) {
+    return { error: "Parent role was not found. Seed roles first." as const };
+  }
+  if (parentRole.permissions.length === 0) {
+    return {
+      error: "Parent role has no permissions. Assign wards.read first." as const,
+    };
+  }
+  return { roleId: parentRole.id };
+}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -33,6 +67,7 @@ export async function GET() {
     orderBy: { fullName: "asc" },
     include: {
       students: { include: { student: true } },
+      user: { include: { role: true } },
     },
   });
   return NextResponse.json(guardians);
@@ -50,11 +85,48 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
+  const createLogin = data.createLogin ?? false;
+
+  if (createLogin) {
+    if (!data.password || data.password.length < 6) {
+      return NextResponse.json(
+        { error: "Password must be at least 6 characters" },
+        { status: 400 }
+      );
+    }
+    if (!data.email && !data.phone) {
+      return NextResponse.json(
+        { error: "Email or phone is required to create a login" },
+        { status: 400 }
+      );
+    }
+    const role = await resolveParentRoleId(data.roleId);
+    if ("error" in role) {
+      return NextResponse.json({ error: role.error }, { status: 400 });
+    }
+    data.roleId = role.roleId;
+  }
 
   try {
     const guardian = await prisma.$transaction(async (tx) => {
+      let userId: string | undefined;
+
+      if (createLogin) {
+        const user = await tx.user.create({
+          data: {
+            email: data.email ? data.email.toLowerCase() : null,
+            phone: data.phone || null,
+            passwordHash: await hash(data.password!, 12),
+            roleId: data.roleId!,
+            imageUrl: data.photoUrl || null,
+          },
+        });
+        userId = user.id;
+      }
+
       const created = await tx.guardian.create({
         data: {
+          userId,
           fullName: data.fullName.trim(),
           phone: data.phone || null,
           email: data.email || null,
@@ -82,7 +154,10 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error(error);
     return NextResponse.json(
-      { error: "Could not create parent. They may already be linked to that student." },
+      {
+        error:
+          "Could not create parent. Login email/phone may already exist, or they may already be linked to that student.",
+      },
       { status: 400 }
     );
   }

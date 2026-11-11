@@ -82,7 +82,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.roleId = user.roleId;
         token.roleName = user.roleName;
-        token.permissions = user.permissions;
+        token.permissions = user.permissions || [];
         token.phone = user.phone;
         token.name = user.name;
         token.picture = user.image;
@@ -94,10 +94,31 @@ export const authOptions: NextAuthOptions = {
         if (session.email !== undefined) token.email = session.email;
         if (session.image !== undefined) token.picture = session.image;
         if (session.phone !== undefined) token.phone = session.phone;
-        if (session.permissions !== undefined) {
-          token.permissions = session.permissions;
+      }
+
+      // Always reload role permissions so edits (e.g. removing dashboard.view)
+      // apply on the next request without forcing a full re-login.
+      if (token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: String(token.id) },
+          select: {
+            roleId: true,
+            role: {
+              select: {
+                name: true,
+                permissions: {
+                  select: { permission: { select: { code: true } } },
+                },
+              },
+            },
+          },
+        });
+        if (dbUser) {
+          token.roleId = dbUser.roleId;
+          token.roleName = dbUser.role?.name || null;
+          token.permissions =
+            dbUser.role?.permissions.map((rp) => rp.permission.code) || [];
         }
-        if (session.roleName !== undefined) token.roleName = session.roleName;
       }
 
       return token;

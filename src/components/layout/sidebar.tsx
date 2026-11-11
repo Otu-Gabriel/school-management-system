@@ -25,6 +25,9 @@ import {
   TrendingUp,
   CalendarRange,
   HeartHandshake,
+  Wallet,
+  PenLine,
+  FileSpreadsheet,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -130,6 +133,18 @@ const sections: { title: string; items: NavItem[] }[] = [
         icon: ClipboardList,
         permission: "assignments.read",
       },
+      {
+        href: "/admin/academics/grading",
+        label: "Grading",
+        icon: PenLine,
+        permission: "marks.read",
+      },
+      {
+        href: "/admin/academics/reports",
+        label: "Report cards",
+        icon: FileSpreadsheet,
+        permission: "marks.read",
+      },
     ],
   },
   {
@@ -142,6 +157,12 @@ const sections: { title: string; items: NavItem[] }[] = [
         permission: "attendance.read",
       },
       {
+        href: "/admin/fees",
+        label: "Fees",
+        icon: Wallet,
+        permission: "fees.read",
+      },
+      {
         href: "/admin/teacher",
         label: "My teaching",
         icon: Presentation,
@@ -152,6 +173,12 @@ const sections: { title: string; items: NavItem[] }[] = [
         label: "My timetable",
         icon: CalendarRange,
         permission: "attendance.read",
+      },
+      {
+        href: "/admin/teacher/marks",
+        label: "Enter marks",
+        icon: PenLine,
+        permission: "marks.write",
       },
       {
         href: "/admin/parent",

@@ -37,7 +37,7 @@ export default async function GuardiansPage({
       }
     : {};
 
-  const [total, guardians, students] = await Promise.all([
+  const [total, guardians, students, roles] = await Promise.all([
     prisma.guardian.count({ where }),
     prisma.guardian.findMany({
       where,
@@ -46,6 +46,7 @@ export default async function GuardiansPage({
         students: {
           include: { student: true },
         },
+        user: { include: { role: true } },
       },
       skip,
       take: pageSize,
@@ -55,7 +56,14 @@ export default async function GuardiansPage({
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
       take: 500,
     }),
+    prisma.role.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
+
+  const defaultParentRoleId =
+    roles.find((r) => r.name === "Parent")?.id || null;
 
   const totalPages = getTotalPages(total, pageSize);
   const canWrite = can(session.user.permissions, "guardians.write");
@@ -68,7 +76,7 @@ export default async function GuardiansPage({
           <PageSizeBootstrap />
         </Suspense>
 
-        <PageHeader description="Parents and guardians linked to enrolled students." />
+        <PageHeader description="Create a parent login (email/phone + password) so they can open My wards after signing in at /login." />
 
         <Suspense fallback={null}>
           <TableFilters
@@ -86,6 +94,8 @@ export default async function GuardiansPage({
         <GuardiansManager
           canWrite={canWrite}
           total={total}
+          roles={roles}
+          defaultParentRoleId={defaultParentRoleId}
           students={students.map((s) => ({
             id: s.id,
             label: `${s.firstName} ${s.lastName} (${s.admissionNo})`,
@@ -98,6 +108,9 @@ export default async function GuardiansPage({
             occupation: g.occupation,
             address: g.address,
             photoUrl: g.photoUrl,
+            hasLogin: Boolean(g.userId),
+            roleId: g.user?.roleId || null,
+            roleName: g.user?.role?.name || null,
             children: g.students
               .map(
                 (link) =>

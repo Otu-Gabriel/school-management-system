@@ -45,11 +45,18 @@ export default async function TeacherPortalPage() {
         <PageHeader
           description="Only classes linked to you as class teacher or subject teacher."
           actions={
-            <Link href="/admin/teacher/timetable">
-              <Button type="button" size="sm" variant="secondary">
-                My timetable
-              </Button>
-            </Link>
+            <div className="flex flex-wrap gap-1.5">
+              <Link href="/admin/teacher/timetable">
+                <Button type="button" size="sm" variant="secondary">
+                  My timetable
+                </Button>
+              </Link>
+              <Link href="/admin/teacher/marks">
+                <Button type="button" size="sm" variant="secondary">
+                  Enter marks
+                </Button>
+              </Link>
+            </div>
           }
         />
 

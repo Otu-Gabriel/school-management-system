@@ -5,11 +5,15 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Modal } from "@/components/ui/modal";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { AvatarCell } from "@/components/table/avatar-cell";
 import { useToast } from "@/components/ui/toast";
 import { labelClassName, selectClassName } from "@/lib/field-styles";
+
+type RoleOption = { id: string; name: string };
 
 type GuardianItem = {
   id: string;
@@ -20,6 +24,9 @@ type GuardianItem = {
   address: string | null;
   photoUrl: string | null;
   children: string;
+  hasLogin: boolean;
+  roleId: string | null;
+  roleName: string | null;
 };
 
 type StudentOption = { id: string; label: string };
@@ -27,12 +34,16 @@ type StudentOption = { id: string; label: string };
 export function GuardiansManager({
   guardians,
   students,
+  roles,
+  defaultParentRoleId,
   canWrite,
   total,
   pagination,
 }: {
   guardians: GuardianItem[];
   students: StudentOption[];
+  roles: RoleOption[];
+  defaultParentRoleId: string | null;
   canWrite: boolean;
   total: number;
   pagination: React.ReactNode;
@@ -41,7 +52,10 @@ export function GuardiansManager({
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingHasLogin, setEditingHasLogin] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     phone: "",
@@ -52,11 +66,15 @@ export function GuardiansManager({
     studentId: "",
     relationship: "GUARDIAN",
     isPrimary: false,
+    createLogin: true,
+    roleId: defaultParentRoleId || "",
+    password: "",
   });
 
   function close() {
     setOpen(false);
     setEditingId(null);
+    setEditingHasLogin(false);
     setForm({
       fullName: "",
       phone: "",
@@ -67,11 +85,15 @@ export function GuardiansManager({
       studentId: "",
       relationship: "GUARDIAN",
       isPrimary: false,
+      createLogin: true,
+      roleId: defaultParentRoleId || "",
+      password: "",
     });
   }
 
   function startCreate() {
     setEditingId(null);
+    setEditingHasLogin(false);
     setForm({
       fullName: "",
       phone: "",
@@ -82,12 +104,16 @@ export function GuardiansManager({
       studentId: "",
       relationship: "GUARDIAN",
       isPrimary: false,
+      createLogin: true,
+      roleId: defaultParentRoleId || "",
+      password: "",
     });
     setOpen(true);
   }
 
   function startEdit(item: GuardianItem) {
     setEditingId(item.id);
+    setEditingHasLogin(item.hasLogin);
     setForm({
       fullName: item.fullName,
       phone: item.phone || "",
@@ -98,6 +124,9 @@ export function GuardiansManager({
       studentId: "",
       relationship: "GUARDIAN",
       isPrimary: false,
+      createLogin: item.hasLogin,
+      roleId: item.roleId || defaultParentRoleId || "",
+      password: "",
     });
     setOpen(true);
   }
@@ -108,15 +137,28 @@ export function GuardiansManager({
     const payload = editingId
       ? {
           fullName: form.fullName,
-          phone: form.phone,
-          email: form.email,
-          occupation: form.occupation,
-          address: form.address,
-          photoUrl: form.photoUrl,
+          phone: form.phone || null,
+          email: form.email || null,
+          occupation: form.occupation || null,
+          address: form.address || null,
+          photoUrl: form.photoUrl || null,
+          createLogin: form.createLogin,
+          roleId: form.roleId || null,
+          password: form.password || null,
         }
       : {
-          ...form,
+          fullName: form.fullName,
+          phone: form.phone || null,
+          email: form.email || null,
+          occupation: form.occupation || null,
+          address: form.address || null,
+          photoUrl: form.photoUrl || null,
           studentId: form.studentId || null,
+          relationship: form.relationship,
+          isPrimary: form.isPrimary,
+          createLogin: form.createLogin,
+          roleId: form.roleId || null,
+          password: form.password || null,
         };
 
     const res = await fetch(
@@ -138,15 +180,19 @@ export function GuardiansManager({
     router.refresh();
   }
 
-  async function onDelete(id: string) {
-    if (!confirm("Delete this parent? Links to students will be removed.")) return;
-    const res = await fetch(`/api/guardians/${id}`, { method: "DELETE" });
+  async function onDelete() {
+    if (!deleteId) return;
+    setDeleting(true);
+    const res = await fetch(`/api/guardians/${deleteId}`, { method: "DELETE" });
     const data = await res.json();
+    setDeleting(false);
     if (!res.ok) {
       toast.warning("Cannot delete parent", data.error || "Please try again.");
+      setDeleteId(null);
       return;
     }
     toast.success("Parent deleted");
+    setDeleteId(null);
     router.refresh();
   }
 
@@ -174,6 +220,7 @@ export function GuardiansManager({
                   <th className="pb-2 font-medium">Name</th>
                   <th className="pb-2 font-medium">Phone</th>
                   <th className="pb-2 font-medium">Email</th>
+                  <th className="pb-2 font-medium">Login</th>
                   <th className="pb-2 font-medium">Children</th>
                   {canWrite ? (
                     <th className="pb-2 font-medium text-right">Actions</th>
@@ -184,7 +231,7 @@ export function GuardiansManager({
                 {guardians.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={canWrite ? 6 : 5}
+                      colSpan={canWrite ? 7 : 6}
                       className="py-6 text-[var(--muted-foreground)]"
                     >
                       No parents match your filters.
@@ -199,6 +246,11 @@ export function GuardiansManager({
                       <td className="py-2 font-medium">{g.fullName}</td>
                       <td className="py-2">{g.phone || "—"}</td>
                       <td className="py-2">{g.email || "—"}</td>
+                      <td className="py-2">
+                        {g.hasLogin
+                          ? g.roleName || "Yes"
+                          : "No login"}
+                      </td>
                       <td className="py-2">{g.children || "—"}</td>
                       {canWrite ? (
                         <td className="py-2">
@@ -215,7 +267,7 @@ export function GuardiansManager({
                               type="button"
                               size="sm"
                               variant="ghost"
-                              onClick={() => onDelete(g.id)}
+                              onClick={() => setDeleteId(g.id)}
                             >
                               Delete
                             </Button>
@@ -236,7 +288,7 @@ export function GuardiansManager({
         open={open}
         onClose={close}
         title={editingId ? "Edit parent" : "Add parent"}
-        description="Parents and guardians linked to enrolled students."
+        description="Create a login so the parent can open My wards at /login."
         size="md"
       >
         <form onSubmit={onSave} className="space-y-3">
@@ -328,6 +380,62 @@ export function GuardiansManager({
               </label>
             </div>
           ) : null}
+
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={form.createLogin}
+              onChange={(e) =>
+                setForm({ ...form, createLogin: e.target.checked })
+              }
+              disabled={editingHasLogin}
+            />
+            {editingHasLogin
+              ? "Login enabled"
+              : "Create login for My wards portal"}
+          </label>
+
+          {form.createLogin ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className={labelClassName}>Role</label>
+                <select
+                  className={selectClassName}
+                  value={form.roleId}
+                  onChange={(e) =>
+                    setForm({ ...form, roleId: e.target.value })
+                  }
+                  required={form.createLogin}
+                >
+                  <option value="">Select role</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className={labelClassName}>
+                  {editingHasLogin
+                    ? "New password (optional)"
+                    : "Temporary password"}
+                </label>
+                <PasswordInput
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm({ ...form, password: e.target.value })
+                  }
+                  required={form.createLogin && !editingHasLogin}
+                  autoComplete="new-password"
+                  placeholder={
+                    editingHasLogin ? "Leave blank to keep current" : "Min 6 chars"
+                  }
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex justify-end gap-1.5">
             <Button type="button" variant="secondary" size="sm" onClick={close}>
               Cancel
@@ -338,6 +446,17 @@ export function GuardiansManager({
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => (deleting ? undefined : setDeleteId(null))}
+        onConfirm={onDelete}
+        title="Delete parent?"
+        description="Links to students will be removed. Any login account for this parent will also be deleted."
+        confirmLabel="Delete"
+        tone="danger"
+        busy={deleting}
+      />
     </>
   );
 }

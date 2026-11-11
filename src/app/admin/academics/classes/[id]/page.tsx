@@ -12,9 +12,16 @@ import {
   formatTimeOfDay,
   subjectsForGradeLevel,
 } from "@/lib/subjects-for-level";
+import {
+  DEFAULT_GRADE_BANDS,
+  DEFAULT_SCHEME,
+  getBandsForStage,
+  getSchemeForStage,
+} from "@/lib/marks";
 import { ClassActions } from "../class-actions";
 import { ClassSubjectsPanel } from "./class-subjects-panel";
 import { ClassTimetablePanel } from "./class-timetable-panel";
+import { ClassMarksPanel } from "./class-marks-panel";
 
 function param(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -32,6 +39,8 @@ export default async function ClassDetailPage({
   const canAssign = can(session.user.permissions, "assignments.write");
   const canWriteTimetable =
     canAssign || can(session.user.permissions, "academics.write");
+  const canReadMarks = can(session.user.permissions, "marks.read");
+  const canWriteMarks = can(session.user.permissions, "marks.write");
   const { id } = await params;
   const sp = await searchParams;
   const yearIdParam = param(sp.yearId) || "";
@@ -73,6 +82,9 @@ export default async function ClassDetailPage({
     levelActivities,
     teacherSubjects,
     timetableSlots,
+    classMarks,
+    markScheme,
+    markBands,
   ] = await Promise.all([
     prisma.gradeLevel.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.staff.findMany({
@@ -111,6 +123,13 @@ export default async function ClassDetailPage({
           orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
         })
       : Promise.resolve([]),
+    selectedTerm && canReadMarks
+      ? prisma.studentMark.findMany({
+          where: { classSectionId: id, termId: selectedTerm.id },
+        })
+      : Promise.resolve([]),
+    getSchemeForStage(classSection.gradeLevel.stageId),
+    getBandsForStage(classSection.gradeLevel.stageId),
   ]);
 
   const assignmentBySubject = new Map(
@@ -295,6 +314,48 @@ export default async function ClassDetailPage({
             };
           })}
         />
+
+        {canReadMarks ? (
+          <ClassMarksPanel
+            classSectionId={id}
+            academicYearId={classSection.academicYearId}
+            termId={selectedTerm?.id || null}
+            termName={selectedTerm?.name || null}
+            canWrite={canWriteMarks}
+            scheme={markScheme || DEFAULT_SCHEME}
+            bands={
+              markBands.length > 0
+                ? markBands.map((b) => ({
+                    label: b.label,
+                    minScore: b.minScore,
+                    maxScore: b.maxScore,
+                  }))
+                : DEFAULT_GRADE_BANDS.map((b) => ({
+                    label: b.label,
+                    minScore: b.minScore,
+                    maxScore: b.maxScore,
+                  }))
+            }
+            subjects={levelSubjects.map((s) => ({
+              id: s.id,
+              code: s.code,
+              name: s.name,
+            }))}
+            students={students.map((row) => ({
+              id: row.student.id,
+              admissionNo: row.student.admissionNo,
+              name: `${row.student.firstName} ${row.student.lastName}`,
+            }))}
+            marks={classMarks.map((m) => ({
+              studentId: m.studentId,
+              subjectId: m.subjectId,
+              classScore: m.classScore,
+              examScore: m.examScore,
+              total: m.total,
+              gradeLabel: m.gradeLabel,
+            }))}
+          />
+        ) : null}
 
         <Card>
           <CardHeader>

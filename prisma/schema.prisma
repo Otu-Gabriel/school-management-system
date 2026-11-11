@@ -56,6 +56,20 @@ enum CalendarDayType {
   OPEN
 }
 
+enum FeeInvoiceStatus {
+  OPEN
+  PARTIAL
+  PAID
+  WAIVED
+}
+
+enum FeePaymentMethod {
+  CASH
+  MOMO
+  BANK
+  OTHER
+}
+
 model Permission {
   id          String   @id @default(cuid())
   code        String   @unique
@@ -136,6 +150,7 @@ model User {
   announcements Announcement[]
   auditLogs     AuditLog[]
   notifications Notification[]
+  feePayments   FeePayment[]
 
   @@index([roleId])
 }
@@ -221,9 +236,12 @@ model Student {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
-  guardians   StudentGuardian[]
-  enrollments Enrollment[]
-  attendance  AttendanceRecord[]
+  guardians    StudentGuardian[]
+  enrollments  Enrollment[]
+  attendance   AttendanceRecord[]
+  marks        StudentMark[]
+  reportCards  ReportCard[]
+  feeInvoices  FeeInvoice[]
 
   @@index([lastName, firstName])
   @@index([status])
@@ -259,6 +277,9 @@ model AcademicYear {
   attendance         AttendanceRecord[]
   calendarExceptions CalendarException[]
   timetableSlots     TimetableSlot[]
+  studentMarks       StudentMark[]
+  reportCards        ReportCard[]
+  feeInvoices        FeeInvoice[]
 }
 
 model Term {
@@ -278,6 +299,9 @@ model Term {
   calendarExceptions CalendarException[]
   enrollments        Enrollment[]
   timetableSlots     TimetableSlot[]
+  studentMarks       StudentMark[]
+  reportCards        ReportCard[]
+  feeInvoices        FeeInvoice[]
 
   @@unique([academicYearId, termNumber])
 }
@@ -311,9 +335,11 @@ model Stage {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  gradeLevels GradeLevel[]
-  subjects    Subject[]
-  activities  Activity[]
+  gradeLevels        GradeLevel[]
+  subjects           Subject[]
+  activities         Activity[]
+  assessmentScheme   AssessmentScheme?
+  gradeBands         GradeBand[]
 }
 
 model GradeLevel {
@@ -360,6 +386,8 @@ model ClassSection {
   announcements   Announcement[]
   attendance      AttendanceRecord[]
   timetableSlots  TimetableSlot[]
+  studentMarks    StudentMark[]
+  reportCards     ReportCard[]
 
   @@unique([academicYearId, gradeLevelId, name])
   @@index([academicYearId, isActive])
@@ -378,6 +406,7 @@ model Subject {
   teacherSubjects TeacherSubject[]
   allowedLevels   SubjectLevel[]
   timetableSlots  TimetableSlot[]
+  studentMarks    StudentMark[]
 
   @@index([stageId])
 }
@@ -560,4 +589,131 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@index([entityType, entityId])
+}
+
+/// CA / exam weight scheme per stage (e.g. Primary 30/70).
+model AssessmentScheme {
+  id               String   @id @default(cuid())
+  stageId          String   @unique
+  stage            Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  classScoreWeight Float    @default(30)
+  examWeight       Float    @default(70)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+/// Letter grade bands for a stage (A 80–100, …).
+model GradeBand {
+  id        String   @id @default(cuid())
+  stageId   String
+  stage     Stage    @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  label     String
+  minScore  Float
+  maxScore  Float
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stageId, label])
+  @@index([stageId, sortOrder])
+}
+
+model StudentMark {
+  id             String       @id @default(cuid())
+  studentId      String
+  subjectId      String
+  classSectionId String
+  academicYearId String
+  termId         String
+  classScore     Float?
+  examScore      Float?
+  total          Float?
+  gradeLabel     String?
+  remark         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  term         Term         @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, subjectId, classSectionId, termId])
+  @@index([classSectionId, termId, subjectId])
+  @@index([studentId, termId])
+}
+
+model ReportCard {
+  id             String       @id @default(cuid())
+  studentId      String
+  classSectionId String
+  academicYearId String
+  termId         String
+  teacherRemark  String?
+  publishedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  term         Term         @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, termId])
+  @@index([classSectionId, termId])
+}
+
+model FeeType {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  defaultAmount Float?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  invoices FeeInvoice[]
+}
+
+model FeeInvoice {
+  id             String           @id @default(cuid())
+  studentId      String
+  feeTypeId      String
+  academicYearId String
+  termId         String?
+  amount         Float
+  dueDate        DateTime?
+  status         FeeInvoiceStatus @default(OPEN)
+  note           String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeType      FeeType       @relation(fields: [feeTypeId], references: [id], onDelete: Restrict)
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  term         Term?         @relation(fields: [termId], references: [id], onDelete: SetNull)
+  payments     FeePayment[]
+
+  @@index([studentId, academicYearId])
+  @@index([status])
+  @@index([feeTypeId])
+}
+
+model FeePayment {
+  id               String           @id @default(cuid())
+  invoiceId        String
+  amount           Float
+  method           FeePaymentMethod @default(CASH)
+  paidOn           DateTime         @default(now())
+  reference        String?
+  receivedByUserId String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  invoice    FeeInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  receivedBy User?      @relation(fields: [receivedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([paidOn])
 }

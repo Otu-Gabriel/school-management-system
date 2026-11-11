@@ -391,6 +391,54 @@ async function main() {
     });
   }
 
+  const { DEFAULT_GRADE_BANDS } = await import("../src/lib/marks");
+  for (const stage of [primaryStage, jhsStage]) {
+    await prisma.assessmentScheme.upsert({
+      where: { stageId: stage.id },
+      update: { classScoreWeight: 30, examWeight: 70 },
+      create: {
+        stageId: stage.id,
+        classScoreWeight: 30,
+        examWeight: 70,
+      },
+    });
+    for (const band of DEFAULT_GRADE_BANDS) {
+      await prisma.gradeBand.upsert({
+        where: {
+          stageId_label: { stageId: stage.id, label: band.label },
+        },
+        update: {
+          minScore: band.minScore,
+          maxScore: band.maxScore,
+          sortOrder: band.sortOrder,
+        },
+        create: {
+          stageId: stage.id,
+          label: band.label,
+          minScore: band.minScore,
+          maxScore: band.maxScore,
+          sortOrder: band.sortOrder,
+        },
+      });
+    }
+  }
+
+  const feeTypes = [
+    { code: "TUITION", name: "Tuition", defaultAmount: 500 },
+    { code: "PTA", name: "PTA Levy", defaultAmount: 50 },
+  ];
+  for (const fee of feeTypes) {
+    await prisma.feeType.upsert({
+      where: { code: fee.code },
+      update: {
+        name: fee.name,
+        defaultAmount: fee.defaultAmount,
+        isActive: true,
+      },
+      create: fee,
+    });
+  }
+
   console.log("Seed complete");
   console.log(`School: ${school.name}`);
   console.log(`Admin login: ${email} / ${password}`);

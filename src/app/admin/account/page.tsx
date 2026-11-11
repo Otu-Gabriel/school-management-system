@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { homePathForPermissions } from "@/lib/permissions";
 import { Topbar } from "@/components/layout/topbar";
 import { AccountForm } from "./account-form";
 
@@ -21,9 +22,15 @@ export default async function AccountPage() {
 
   if (!user) redirect("/login");
 
+  const home = homePathForPermissions(session.user.permissions);
+
   return (
     <>
-      <Topbar title="My account" backHref="/admin" backLabel="Dashboard" />
+      <Topbar
+        title="My account"
+        backHref={home}
+        backLabel={home === "/admin" ? "Dashboard" : "Back"}
+      />
       <main className="flex-1 overflow-y-auto p-3 sm:p-4">
         <AccountForm
           account={{

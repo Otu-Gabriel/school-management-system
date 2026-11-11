@@ -1,11 +1,12 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { getSession, signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { homePathForPermissions } from "@/lib/permissions";
 
 export function LoginForm({
   schoolName,
@@ -16,16 +17,24 @@ export function LoginForm({
   shortName?: string | null;
   logoUrl?: string | null;
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(() =>
     searchParams.get("error") === "access"
-      ? "Your account has no portal access. Ask an admin to assign a role."
+      ? "Your account has no usable permissions. Ask an admin to assign a role."
       : null
   );
   const [loading, setLoading] = useState(false);
+
+  async function waitForSessionPermissions() {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const session = await getSession();
+      if (session?.user?.permissions?.length) return session;
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+    return getSession();
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,15 +47,16 @@ export function LoginForm({
       redirect: false,
     });
 
-    setLoading(false);
-
     if (result?.error) {
+      setLoading(false);
       setError("Invalid email/phone or password.");
       return;
     }
 
-    router.push("/admin");
-    router.refresh();
+    const session = await waitForSessionPermissions();
+    const destination = homePathForPermissions(session?.user?.permissions);
+    // Hard navigation so the auth cookie is always used on the next request.
+    window.location.assign(destination);
   }
 
   const initials = (shortName || schoolName || "SMS")

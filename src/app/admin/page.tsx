@@ -1,11 +1,16 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requirePermission } from "@/lib/authz";
+import { requireSession } from "@/lib/authz";
+import { can, homePathForPermissions } from "@/lib/permissions";
 import { Topbar } from "@/components/layout/topbar";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { OverviewCharts } from "@/components/dashboard/overview-charts";
 
 export default async function AdminDashboardPage() {
-  await requirePermission("dashboard.view");
+  const session = await requireSession();
+  if (!can(session.user.permissions, "dashboard.view")) {
+    redirect(homePathForPermissions(session.user.permissions));
+  }
 
   const [students, staff, guardians, classes, byLevel, male, female] =
     await Promise.all([
