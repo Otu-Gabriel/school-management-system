@@ -42,7 +42,16 @@ export default async function TeacherPortalPage() {
     <>
       <Topbar title="My teaching" backHref="/admin" backLabel="Dashboard" />
       <main className="flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
-        <PageHeader description="Only classes linked to you as class teacher or subject teacher." />
+        <PageHeader
+          description="Only classes linked to you as class teacher or subject teacher."
+          actions={
+            <Link href="/admin/teacher/timetable">
+              <Button type="button" size="sm" variant="secondary">
+                My timetable
+              </Button>
+            </Link>
+          }
+        />
 
         {!staff && !schoolWide ? (
           <Card>

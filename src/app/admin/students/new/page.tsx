@@ -8,7 +8,7 @@ export default async function NewStudentPage() {
 
   const [classes, year] = await Promise.all([
     prisma.classSection.findMany({
-      where: { academicYear: { isCurrent: true } },
+      where: { academicYear: { isCurrent: true }, isActive: true },
       include: { gradeLevel: true },
       orderBy: [{ gradeLevel: { sortOrder: "asc" } }, { name: "asc" }],
     }),

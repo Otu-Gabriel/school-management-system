@@ -10,7 +10,34 @@ const schema = z.object({
   name: z.string().min(2),
   stageId: z.string().optional().nullable(),
   isCore: z.boolean().optional(),
+  gradeLevelIds: z.array(z.string()).optional(),
 });
+
+async function validateLevelIds(stageId: string | null, gradeLevelIds: string[]) {
+  if (gradeLevelIds.length === 0) return { ok: true as const };
+
+  const levels = await prisma.gradeLevel.findMany({
+    where: { id: { in: gradeLevelIds } },
+  });
+  if (levels.length !== gradeLevelIds.length) {
+    return { ok: false as const, error: "One or more selected levels were not found" };
+  }
+
+  if (stageId) {
+    const stage = await prisma.stage.findUnique({ where: { id: stageId } });
+    if (stage && stage.code !== "ALL") {
+      const invalid = levels.filter((l) => l.stageId !== stageId);
+      if (invalid.length > 0) {
+        return {
+          ok: false as const,
+          error: "Selected levels must belong to the subject's stage",
+        };
+      }
+    }
+  }
+
+  return { ok: true as const };
+}
 
 export async function PUT(
   request: Request,
@@ -27,15 +54,32 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid subject data" }, { status: 400 });
   }
 
+  const stageId = parsed.data.stageId || null;
+  const gradeLevelIds = [...new Set(parsed.data.gradeLevelIds || [])];
+  const levelCheck = await validateLevelIds(stageId, gradeLevelIds);
+  if (!levelCheck.ok) {
+    return NextResponse.json({ error: levelCheck.error }, { status: 400 });
+  }
+
   try {
-    const subject = await prisma.subject.update({
-      where: { id },
-      data: {
-        code: parsed.data.code.trim().toUpperCase(),
-        name: parsed.data.name.trim(),
-        stageId: parsed.data.stageId || null,
-        isCore: parsed.data.isCore ?? true,
-      },
+    const subject = await prisma.$transaction(async (tx) => {
+      await tx.subjectLevel.deleteMany({ where: { subjectId: id } });
+      return tx.subject.update({
+        where: { id },
+        data: {
+          code: parsed.data.code.trim().toUpperCase(),
+          name: parsed.data.name.trim(),
+          stageId,
+          isCore: parsed.data.isCore ?? true,
+          allowedLevels: {
+            create: gradeLevelIds.map((gradeLevelId) => ({ gradeLevelId })),
+          },
+        },
+        include: {
+          stage: true,
+          allowedLevels: { include: { gradeLevel: true } },
+        },
+      });
     });
     return NextResponse.json(subject);
   } catch {
@@ -58,7 +102,9 @@ export async function DELETE(
   const { id } = await params;
   const subject = await prisma.subject.findUnique({
     where: { id },
-    include: { _count: { select: { teacherSubjects: true } } },
+    include: {
+      _count: { select: { teacherSubjects: true, timetableSlots: true } },
+    },
   });
 
   if (!subject) {
@@ -67,6 +113,12 @@ export async function DELETE(
   if (subject._count.teacherSubjects > 0) {
     return NextResponse.json(
       { error: "Remove teaching assignments for this subject first" },
+      { status: 400 }
+    );
+  }
+  if (subject._count.timetableSlots > 0) {
+    return NextResponse.json(
+      { error: "Remove timetable slots for this subject first" },
       { status: 400 }
     );
   }

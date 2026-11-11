@@ -4,6 +4,8 @@ export type PermissionCode =
   | "students.write"
   | "students.import"
   | "students.export"
+  | "students.transfer"
+  | "students.promote"
   | "staff.read"
   | "staff.write"
   | "staff.import"
@@ -15,6 +17,8 @@ export type PermissionCode =
   | "stages.manage"
   | "subjects.read"
   | "subjects.write"
+  | "activities.read"
+  | "activities.write"
   | "assignments.read"
   | "assignments.write"
   | "announcements.read"
@@ -25,7 +29,8 @@ export type PermissionCode =
   | "settings.write"
   | "roles.manage"
   | "departments.manage"
-  | "positions.manage";
+  | "positions.manage"
+  | "wards.read";
 
 export const PERMISSION_CATALOG: Array<{
   code: PermissionCode;
@@ -61,6 +66,18 @@ export const PERMISSION_CATALOG: Array<{
     code: "students.export",
     name: "Export students",
     description: "Export students to CSV",
+    module: "Students",
+  },
+  {
+    code: "students.transfer",
+    name: "Transfer students",
+    description: "Move students between classes anytime with a reason",
+    module: "Students",
+  },
+  {
+    code: "students.promote",
+    name: "Promote / repeat students",
+    description: "Run year-end promotion and repetition into the next year",
     module: "Students",
   },
   {
@@ -130,6 +147,18 @@ export const PERMISSION_CATALOG: Array<{
     module: "Academics",
   },
   {
+    code: "activities.read",
+    name: "View activities",
+    description: "See the school activity catalog (break, lunch, worship, etc.)",
+    module: "Academics",
+  },
+  {
+    code: "activities.write",
+    name: "Manage activities",
+    description: "Create and update timetable activities",
+    module: "Academics",
+  },
+  {
     code: "assignments.read",
     name: "View teaching assignments",
     description: "See which teacher teaches which subject/class",
@@ -195,6 +224,12 @@ export const PERMISSION_CATALOG: Array<{
     description: "Create and edit positions",
     module: "System",
   },
+  {
+    code: "wards.read",
+    name: "View my wards",
+    description: "See linked children’s class timetables and parent portal",
+    module: "Parent",
+  },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
@@ -205,6 +240,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "students.write",
     "students.import",
     "students.export",
+    "students.transfer",
+    "students.promote",
     "guardians.read",
     "guardians.write",
     "staff.read",
@@ -213,6 +250,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "stages.manage",
     "subjects.read",
     "subjects.write",
+    "activities.read",
+    "activities.write",
     "assignments.read",
     "assignments.write",
     "announcements.read",
@@ -233,6 +272,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "students.read",
     "academics.read",
     "subjects.read",
+    "activities.read",
     "assignments.read",
     "announcements.read",
     "attendance.read",
@@ -246,6 +286,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionCode[]> = {
     "announcements.read",
     "attendance.read",
   ],
-  Parent: ["dashboard.view", "announcements.read"],
+  Parent: ["dashboard.view", "announcements.read", "wards.read"],
   Student: ["dashboard.view", "announcements.read"],
 };

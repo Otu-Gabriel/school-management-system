@@ -55,16 +55,20 @@ export function Topbar({
           <Menu className="h-4 w-4" />
         </button>
 
+        {backHref ? (
+          <Link
+            href={backHref}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--muted)]"
+            aria-label={`Back to ${backLabel}`}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span className="max-w-[7rem] truncate sm:max-w-[10rem]">
+              {backLabel}
+            </span>
+          </Link>
+        ) : null}
+
         <div className="min-w-0">
-          {backHref ? (
-            <Link
-              href={backHref}
-              className="mb-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-            >
-              <ArrowLeft className="h-3 w-3" />
-              <span className="truncate">{backLabel}</span>
-            </Link>
-          ) : null}
           <h1 className="truncate text-sm font-semibold text-[var(--foreground)]">
             {title}
           </h1>

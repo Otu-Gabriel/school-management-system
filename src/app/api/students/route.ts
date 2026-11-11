@@ -4,6 +4,8 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { ensurePlacement } from "@/lib/placements";
+import { getCurrentAcademicContext } from "@/lib/school";
 
 const schema = z.object({
   admissionNo: z.string().min(1),
@@ -23,6 +25,55 @@ const schema = z.object({
     .default("GUARDIAN"),
 });
 
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user || !can(session.user.permissions, "students.read")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const classSectionId = searchParams.get("classSectionId") || "";
+  const status = searchParams.get("status") || "";
+  const lite = searchParams.get("lite") === "1";
+
+  const where = {
+    ...(classSectionId ? { currentClassSectionId: classSectionId } : {}),
+    ...(status ? { status: status as "ACTIVE" } : {}),
+  };
+
+  if (lite) {
+    const students = await prisma.student.findMany({
+      where,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      select: {
+        id: true,
+        admissionNo: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+    return NextResponse.json({
+      students: students.map((s) => ({
+        id: s.id,
+        admissionNo: s.admissionNo,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        name: `${s.firstName} ${s.lastName}`,
+      })),
+    });
+  }
+
+  const students = await prisma.student.findMany({
+    where,
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    include: {
+      currentClassSection: { include: { gradeLevel: true } },
+    },
+  });
+
+  return NextResponse.json({ students });
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user || !can(session.user.permissions, "students.write")) {
@@ -37,6 +88,7 @@ export async function POST(request: Request) {
   const data = parsed.data;
 
   try {
+    const context = await getCurrentAcademicContext();
     const student = await prisma.$transaction(async (tx) => {
       const created = await tx.student.create({
         data: {
@@ -69,14 +121,18 @@ export async function POST(request: Request) {
         },
       });
 
-      if (data.classSectionId && data.academicYearId) {
-        await tx.enrollment.create({
-          data: {
+      if (data.classSectionId) {
+        const yearId = data.academicYearId || context.year?.id || null;
+        if (yearId) {
+          await ensurePlacement(tx, {
             studentId: created.id,
             classSectionId: data.classSectionId,
-            academicYearId: data.academicYearId,
-          },
-        });
+            academicYearId: yearId,
+            termId: context.term?.id || null,
+            status: "ENROLLED",
+            reason: "Initial enrolment",
+          });
+        }
       }
 
       return created;

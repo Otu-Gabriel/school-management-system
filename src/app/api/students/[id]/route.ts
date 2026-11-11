@@ -4,6 +4,8 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { ensurePlacement, openPlacement } from "@/lib/placements";
+import { getCurrentAcademicContext } from "@/lib/school";
 
 const schema = z.object({
   admissionNo: z.string().min(1),
@@ -103,21 +105,32 @@ export async function PUT(
         });
       }
 
-      if (data.classSectionId && data.academicYearId) {
-        await tx.enrollment.upsert({
-          where: {
-            studentId_academicYearId: {
+      if (data.classSectionId) {
+        const context = await getCurrentAcademicContext();
+        const yearId = data.academicYearId || context.year?.id || null;
+        if (yearId) {
+          if (
+            existing.currentClassSectionId &&
+            existing.currentClassSectionId !== data.classSectionId
+          ) {
+            await openPlacement(tx, {
               studentId: id,
-              academicYearId: data.academicYearId,
-            },
-          },
-          update: { classSectionId: data.classSectionId },
-          create: {
-            studentId: id,
-            classSectionId: data.classSectionId,
-            academicYearId: data.academicYearId,
-          },
-        });
+              classSectionId: data.classSectionId,
+              academicYearId: yearId,
+              termId: context.term?.id || null,
+              status: "TRANSFERRED",
+              reason: "Class changed from student profile",
+            });
+          } else {
+            await ensurePlacement(tx, {
+              studentId: id,
+              classSectionId: data.classSectionId,
+              academicYearId: yearId,
+              termId: context.term?.id || null,
+              status: "ENROLLED",
+            });
+          }
+        }
       }
 
       return updated;

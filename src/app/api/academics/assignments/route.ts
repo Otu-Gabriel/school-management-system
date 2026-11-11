@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { subjectAppliesToGradeLevel } from "@/lib/subjects-for-level";
 
 const schema = z.object({
   staffId: z.string().min(1),
@@ -73,27 +74,67 @@ export async function POST(request: Request) {
     );
   }
 
+  const applies = await subjectAppliesToGradeLevel(
+    data.subjectId,
+    classSection.gradeLevelId
+  );
+  if (!applies) {
+    return NextResponse.json(
+      { error: "This subject does not apply to the class level" },
+      { status: 400 }
+    );
+  }
+
+  const existing = await prisma.teacherSubject.findFirst({
+    where: {
+      subjectId: data.subjectId,
+      classSectionId: data.classSectionId,
+      academicYearId: data.academicYearId,
+    },
+  });
+
   try {
-    const assignment = await prisma.teacherSubject.create({
-      data: {
-        staffId: data.staffId,
-        subjectId: data.subjectId,
+    const assignment = existing
+      ? await prisma.teacherSubject.update({
+          where: { id: existing.id },
+          data: { staffId: data.staffId },
+          include: {
+            staff: true,
+            subject: true,
+            classSection: { include: { gradeLevel: true } },
+            academicYear: true,
+          },
+        })
+      : await prisma.teacherSubject.create({
+          data: {
+            staffId: data.staffId,
+            subjectId: data.subjectId,
+            classSectionId: data.classSectionId,
+            academicYearId: data.academicYearId,
+          },
+          include: {
+            staff: true,
+            subject: true,
+            classSection: { include: { gradeLevel: true } },
+            academicYear: true,
+          },
+        });
+
+    await prisma.timetableSlot.updateMany({
+      where: {
         classSectionId: data.classSectionId,
+        subjectId: data.subjectId,
         academicYearId: data.academicYearId,
       },
-      include: {
-        staff: true,
-        subject: true,
-        classSection: { include: { gradeLevel: true } },
-        academicYear: true,
-      },
+      data: { staffId: data.staffId },
     });
-    return NextResponse.json(assignment, { status: 201 });
+
+    return NextResponse.json(assignment, { status: existing ? 200 : 201 });
   } catch {
     return NextResponse.json(
       {
         error:
-          "Could not create assignment. This teacher may already teach that subject in the class for the year.",
+          "Could not create assignment. This class may already have a teacher for that subject.",
       },
       { status: 400 }
     );

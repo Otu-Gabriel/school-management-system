@@ -41,6 +41,7 @@ enum EnrollmentStatus {
   PROMOTED
   REPEATED
   TRANSFERRED
+  CONTINUED
 }
 
 enum AttendanceStatus {
@@ -181,6 +182,7 @@ model Staff {
   classSections       ClassSection[]      @relation("ClassTeacher")
   teacherSubjects     TeacherSubject[]
   attendanceMarked    AttendanceRecord[]  @relation("AttendanceMarkedBy")
+  timetableSlots      TimetableSlot[]
 }
 
 model Guardian {
@@ -256,6 +258,7 @@ model AcademicYear {
   teacherSubjects    TeacherSubject[]
   attendance         AttendanceRecord[]
   calendarExceptions CalendarException[]
+  timetableSlots     TimetableSlot[]
 }
 
 model Term {
@@ -273,6 +276,8 @@ model Term {
 
   attendance         AttendanceRecord[]
   calendarExceptions CalendarException[]
+  enrollments        Enrollment[]
+  timetableSlots     TimetableSlot[]
 
   @@unique([academicYearId, termNumber])
 }
@@ -308,6 +313,7 @@ model Stage {
 
   gradeLevels GradeLevel[]
   subjects    Subject[]
+  activities  Activity[]
 }
 
 model GradeLevel {
@@ -320,7 +326,9 @@ model GradeLevel {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  classSections ClassSection[]
+  classSections   ClassSection[]
+  subjectLevels   SubjectLevel[]
+  activityLevels  ActivityLevel[]
 
   @@index([stageId])
 }
@@ -337,6 +345,12 @@ model ClassSection {
   classTeacher   Staff?       @relation("ClassTeacher", fields: [classTeacherId], references: [id], onDelete: SetNull)
   room           String?
   capacity       Int?
+  /// Soft-archive. Never hard-delete when students (current/historical) reference it.
+  isActive       Boolean      @default(true)
+  /// Class copied from a previous year's class during year rollover.
+  copiedFromId   String?
+  copiedFrom     ClassSection?  @relation("ClassCopy", fields: [copiedFromId], references: [id], onDelete: SetNull)
+  copies         ClassSection[] @relation("ClassCopy")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -345,8 +359,10 @@ model ClassSection {
   teacherSubjects TeacherSubject[]
   announcements   Announcement[]
   attendance      AttendanceRecord[]
+  timetableSlots  TimetableSlot[]
 
   @@unique([academicYearId, gradeLevelId, name])
+  @@index([academicYearId, isActive])
 }
 
 model Subject {
@@ -360,8 +376,22 @@ model Subject {
   updatedAt DateTime @updatedAt
 
   teacherSubjects TeacherSubject[]
+  allowedLevels   SubjectLevel[]
+  timetableSlots  TimetableSlot[]
 
   @@index([stageId])
+}
+
+/// Restrict a subject to specific grade levels. Empty = all levels in the subject's stage.
+model SubjectLevel {
+  id           String     @id @default(cuid())
+  subjectId    String
+  gradeLevelId String
+  subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  gradeLevel   GradeLevel @relation(fields: [gradeLevelId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, gradeLevelId])
+  @@index([gradeLevelId])
 }
 
 model TeacherSubject {
@@ -376,20 +406,92 @@ model TeacherSubject {
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
 
   @@unique([staffId, subjectId, classSectionId, academicYearId])
+  @@unique([subjectId, classSectionId, academicYearId])
+  @@index([classSectionId, academicYearId])
 }
 
+/// School activity catalog (Break, Lunch, Worship, etc.). Scoped like subjects.
+model Activity {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  stageId   String?
+  stage     Stage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allowedLevels  ActivityLevel[]
+  timetableSlots TimetableSlot[]
+
+  @@index([stageId])
+}
+
+/// Restrict an activity to specific grade levels. Empty = all levels in the activity's stage.
+model ActivityLevel {
+  id           String     @id @default(cuid())
+  activityId   String
+  gradeLevelId String
+  activity     Activity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  gradeLevel   GradeLevel @relation(fields: [gradeLevelId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, gradeLevelId])
+  @@index([gradeLevelId])
+}
+
+/// Weekly class timetable slot (day + start/end time). Subject XOR activity; overlaps blocked in API.
+model TimetableSlot {
+  id             String       @id @default(cuid())
+  academicYearId String
+  termId         String
+  classSectionId String
+  subjectId      String?
+  activityId     String?
+  staffId        String?
+  /// 1 = Monday … 5 = Friday
+  dayOfWeek      Int
+  startTime      DateTime     @db.Time
+  endTime        DateTime     @db.Time
+  room           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  term         Term         @relation(fields: [termId], references: [id], onDelete: Cascade)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  subject      Subject?     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  activity     Activity?    @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  staff        Staff?       @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@index([classSectionId, termId, dayOfWeek])
+  @@index([staffId, termId, dayOfWeek])
+  @@index([academicYearId, termId])
+  @@index([activityId])
+  @@index([subjectId])
+}
+
+/// Placement history. A student may have many rows per year (mid-year transfers).
+/// Current row has isCurrent=true and endedOn=null. Past rows are archived.
 model Enrollment {
   id             String           @id @default(cuid())
   studentId      String
   classSectionId String
   academicYearId String
+  termId         String?
   student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
   academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  term           Term?            @relation(fields: [termId], references: [id], onDelete: SetNull)
   status         EnrollmentStatus @default(ENROLLED)
+  reason         String?
+  startedOn      DateTime         @default(now())
+  endedOn        DateTime?
+  isCurrent      Boolean          @default(true)
   enrolledOn     DateTime         @default(now())
 
-  @@unique([studentId, academicYearId])
+  @@index([studentId, academicYearId])
+  @@index([studentId, isCurrent])
+  @@index([classSectionId])
+  @@index([termId])
 }
 
 model AttendanceRecord {

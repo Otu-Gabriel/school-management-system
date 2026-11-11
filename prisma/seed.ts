@@ -356,6 +356,41 @@ async function main() {
     });
   }
 
+  // Level multi-select example: Computing only for upper primary (no class opt-out).
+  const allGradeLevels = await prisma.gradeLevel.findMany();
+  const byCode = Object.fromEntries(allGradeLevels.map((l) => [l.code, l.id]));
+  const computing = await prisma.subject.findUnique({ where: { code: "COMP" } });
+  if (computing) {
+    const computingLevels = ["P4", "P5", "P6"]
+      .map((code) => byCode[code])
+      .filter(Boolean);
+    await prisma.subjectLevel.deleteMany({ where: { subjectId: computing.id } });
+    if (computingLevels.length > 0) {
+      await prisma.subjectLevel.createMany({
+        data: computingLevels.map((gradeLevelId) => ({
+          subjectId: computing.id,
+          gradeLevelId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  const activities = [
+    { code: "WORSHIP", name: "Worship / Assembly", stageId: allStage.id },
+    { code: "BREAKFAST", name: "Breakfast", stageId: allStage.id },
+    { code: "BREAK", name: "Break", stageId: allStage.id },
+    { code: "LUNCH", name: "Lunch", stageId: allStage.id },
+  ];
+
+  for (const activity of activities) {
+    await prisma.activity.upsert({
+      where: { code: activity.code },
+      update: activity,
+      create: activity,
+    });
+  }
+
   console.log("Seed complete");
   console.log(`School: ${school.name}`);
   console.log(`Admin login: ${email} / ${password}`);

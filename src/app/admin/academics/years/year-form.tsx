@@ -81,7 +81,12 @@ export function AcademicYearForm() {
       toast.error("Could not create year", data.error || "Please try again.");
       return;
     }
-    toast.success("Academic year created", "Year, terms, and current term saved.");
+    toast.success(
+      "Academic year created",
+      data.classesCopied
+        ? `Year saved. Copied ${data.classesCopied} active class${data.classesCopied === 1 ? "" : "es"} from last year.`
+        : "Year, terms, and current term saved."
+    );
     setForm({
       name: "",
       startDate: "",

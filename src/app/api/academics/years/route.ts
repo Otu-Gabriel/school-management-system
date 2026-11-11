@@ -6,6 +6,7 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { parseDateOnly } from "@/lib/dates";
 import { writeAuditLog } from "@/lib/audit";
+import { copyActiveClassesToYear } from "@/lib/class-year";
 
 const termSchema = z.object({
   name: z.string().min(1),
@@ -88,7 +89,14 @@ export async function POST(request: Request) {
   const data = parsed.data;
 
   try {
-    const year = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
+      const sourceYear = await tx.academicYear.findFirst({
+        where: {
+          OR: [{ isCurrent: true }, { classSections: { some: { isActive: true } } }],
+        },
+        orderBy: [{ isCurrent: "desc" }, { endDate: "desc" }],
+      });
+
       if (data.setCurrent) {
         await tx.academicYear.updateMany({ data: { isCurrent: false } });
         await tx.term.updateMany({ data: { isCurrent: false } });
@@ -117,22 +125,35 @@ export async function POST(request: Request) {
         });
       }
 
-      return created;
+      const copy = await copyActiveClassesToYear(tx, {
+        targetYearId: created.id,
+        sourceYearId: sourceYear?.id || null,
+      });
+
+      return { created, copy };
     });
 
     await writeAuditLog({
       userId: session.user.id,
       action: "academicYear.create",
       entityType: "AcademicYear",
-      entityId: year.id,
+      entityId: result.created.id,
       newValues: {
-        name: year.name,
+        name: result.created.name,
         terms: data.terms.length,
         currentTermNumber: data.currentTermNumber,
+        classesCopied: result.copy.copied,
+        copiedFromYearId: result.copy.sourceYearId,
       },
     });
 
-    return NextResponse.json(year, { status: 201 });
+    return NextResponse.json(
+      {
+        ...result.created,
+        classesCopied: result.copy.copied,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error(error);
     return NextResponse.json(

@@ -23,7 +23,7 @@ export default async function EditStudentPage({
       },
     }),
     prisma.classSection.findMany({
-      where: { academicYear: { isCurrent: true } },
+      where: { academicYear: { isCurrent: true }, isActive: true },
       include: { gradeLevel: true },
       orderBy: [{ gradeLevel: { sortOrder: "asc" } }, { name: "asc" }],
     }),

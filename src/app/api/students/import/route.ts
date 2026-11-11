@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { csvToObjects } from "@/lib/csv";
+import { ensurePlacement } from "@/lib/placements";
 
 function asGender(value?: string): Gender | undefined {
   const key = value?.trim().toUpperCase();
@@ -119,12 +120,12 @@ export async function POST(request: Request) {
         });
 
         if (classSectionId && year) {
-          await tx.enrollment.create({
-            data: {
-              studentId: student.id,
-              classSectionId,
-              academicYearId: year.id,
-            },
+          await ensurePlacement(tx, {
+            studentId: student.id,
+            classSectionId,
+            academicYearId: year.id,
+            status: "ENROLLED",
+            reason: "Imported enrolment",
           });
         }
       });

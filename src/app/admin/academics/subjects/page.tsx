@@ -45,12 +45,16 @@ export default async function SubjectsPage({
     ],
   };
 
-  const [total, subjects, stages] = await Promise.all([
+  const [total, subjects, stages, levels] = await Promise.all([
     prisma.subject.count({ where }),
     prisma.subject.findMany({
       where,
       include: {
         stage: true,
+        allowedLevels: {
+          include: { gradeLevel: true },
+          orderBy: { gradeLevel: { sortOrder: "asc" } },
+        },
         _count: { select: { teacherSubjects: true } },
       },
       orderBy: [{ name: "asc" }],
@@ -60,6 +64,9 @@ export default async function SubjectsPage({
     prisma.stage.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+    prisma.gradeLevel.findMany({
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
     }),
   ]);
 
@@ -73,7 +80,7 @@ export default async function SubjectsPage({
           <PageSizeBootstrap />
         </Suspense>
 
-        <PageHeader description="Subject catalog used for teaching assignments, timetables, and marks." />
+        <PageHeader description="Subjects apply by grade level (multi-select). Classes inherit the matching set automatically — no per-class opt-out." />
 
         <Suspense fallback={null}>
           <TableFilters
@@ -106,15 +113,24 @@ export default async function SubjectsPage({
         <SubjectsManager
           canWrite={canWrite}
           total={total}
-          stages={stages.map((s) => ({ id: s.id, name: s.name }))}
+          stages={stages.map((s) => ({ id: s.id, name: s.name, code: s.code }))}
+          levels={levels.map((l) => ({
+            id: l.id,
+            code: l.code,
+            name: l.name,
+            stageId: l.stageId,
+          }))}
           subjects={subjects.map((s) => ({
             id: s.id,
             code: s.code,
             name: s.name,
             stageId: s.stageId,
             stageName: s.stage?.name || null,
+            stageCode: s.stage?.code || null,
             isCore: s.isCore,
             assignmentCount: s._count.teacherSubjects,
+            gradeLevelIds: s.allowedLevels.map((row) => row.gradeLevelId),
+            levelLabels: s.allowedLevels.map((row) => row.gradeLevel.code),
           }))}
           pagination={
             <Suspense fallback={null}>

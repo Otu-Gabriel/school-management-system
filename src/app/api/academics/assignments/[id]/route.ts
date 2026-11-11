@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
+import { subjectAppliesToGradeLevel } from "@/lib/subjects-for-level";
 
 const schema = z.object({
   staffId: z.string().min(1),
@@ -41,6 +42,17 @@ export async function PUT(
     );
   }
 
+  const applies = await subjectAppliesToGradeLevel(
+    data.subjectId,
+    classSection.gradeLevelId
+  );
+  if (!applies) {
+    return NextResponse.json(
+      { error: "This subject does not apply to the class level" },
+      { status: 400 }
+    );
+  }
+
   try {
     const assignment = await prisma.teacherSubject.update({
       where: { id },
@@ -57,12 +69,22 @@ export async function PUT(
         academicYear: true,
       },
     });
+
+    await prisma.timetableSlot.updateMany({
+      where: {
+        classSectionId: data.classSectionId,
+        subjectId: data.subjectId,
+        academicYearId: data.academicYearId,
+      },
+      data: { staffId: data.staffId },
+    });
+
     return NextResponse.json(assignment);
   } catch {
     return NextResponse.json(
       {
         error:
-          "Could not update assignment. This combination may already exist.",
+          "Could not update assignment. This class may already have a teacher for that subject.",
       },
       { status: 400 }
     );

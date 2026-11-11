@@ -21,6 +21,10 @@ import {
   ClipboardCheck,
   ScrollText,
   Presentation,
+  ArrowRightLeft,
+  TrendingUp,
+  CalendarRange,
+  HeartHandshake,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -54,6 +58,12 @@ const sections: { title: string; items: NavItem[] }[] = [
         label: "Students",
         icon: GraduationCap,
         permission: "students.read",
+      },
+      {
+        href: "/admin/students/transfer",
+        label: "Transfer",
+        icon: ArrowRightLeft,
+        permission: "students.transfer",
       },
       {
         href: "/admin/staff",
@@ -97,10 +107,22 @@ const sections: { title: string; items: NavItem[] }[] = [
         permission: "academics.read",
       },
       {
+        href: "/admin/academics/promotion",
+        label: "Promotion",
+        icon: TrendingUp,
+        permission: "students.promote",
+      },
+      {
         href: "/admin/academics/subjects",
         label: "Subjects",
         icon: BookMarked,
         permission: "subjects.read",
+      },
+      {
+        href: "/admin/academics/activities",
+        label: "Activities",
+        icon: CalendarDays,
+        permission: "activities.read",
       },
       {
         href: "/admin/academics/assignments",
@@ -124,6 +146,18 @@ const sections: { title: string; items: NavItem[] }[] = [
         label: "My teaching",
         icon: Presentation,
         permission: "attendance.read",
+      },
+      {
+        href: "/admin/teacher/timetable",
+        label: "My timetable",
+        icon: CalendarRange,
+        permission: "attendance.read",
+      },
+      {
+        href: "/admin/parent",
+        label: "My wards",
+        icon: HeartHandshake,
+        permission: "wards.read",
       },
     ],
   },
